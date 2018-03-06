@@ -1,0 +1,6 @@
+american AND NOT american
+american
+american AND analyst
+american AND assess
+american AND NOT assess
+(a OR b) AND c
