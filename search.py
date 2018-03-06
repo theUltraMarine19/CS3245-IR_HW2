@@ -44,13 +44,15 @@ def fetchPostings(term):
 	return retPostings
 
 def inputQueries(queriesFile):
-	start_time = datetime.datetime.now()
 	queriesList = []
 	with open(queriesFile, 'r') as fq:
 		queries = fp.readlines()
 		for line in fq:
 			line = line.strip()
 			tokens = nltk.word_tokenize(line)
+			if tokens[-1] == '.':
+				tokens.pop()
+				tokens[-1] = tokens[-1] + '.'
 			
 			queryTerms = []
 			for token in tokens:
@@ -86,13 +88,30 @@ def handleQueries(queriesList):
 			output.append(refinePostings(fetchPostings(query[0])))
 
 		else:
-			for token in query:
+			ind = 0
+			while ind < len(query):
+				token = query[ind]
 
 				if (token != 'AND' and token != 'OR' and token != 'NOT'):
 					operandStack.append(token)
 
 				elif (token == 'NOT'):
-					if (len(operandStack) > 0):
+					# a AND NOT b type queries
+					if ((len(operandStack) > 1) and (query[ind + 1] == 'AND')):
+						term_curr1 = operandStack.pop()
+						if not(isinstance(term_curr1, (list,))):
+							term_curr1 = fetchPostings(term_curr1)
+
+						term_curr2 = operandStack.pop()
+						if not(isinstance(term_curr2, (list,))):
+							term_curr2 = fetchPostings(term_curr2)
+
+						ans = OpANDNOT(term_curr2, term_curr1)
+						operandStack.append(ans)
+						ind+=1
+
+					# simple NOT queries
+					elif (len(operandStack) > 0):
 						term_curr = operandStack.pop()
 						if not(isinstance(term_curr, (list,))):
 							term_curr = fetchPostings(term_curr)
@@ -125,6 +144,8 @@ def handleQueries(queriesList):
 						ans = OpOR(term_curr1, term_curr2)
 						operandStack.append(ans)
 
+				ind+=1
+
 			output.append(operandStack.pop())
 
 	return output
@@ -137,8 +158,6 @@ def outputResult(outputToPost, resultsFile):
 			fileout.write(val)
 			fileout.write(' ')
 		fileout.write('\n')
-
-	end_time = datetime.datetime.now()
 
 def shuntingYard(infixQuery):
 	output = []
@@ -351,8 +370,12 @@ if dictFile == None or postingsFile == None or queriesFile == None or resultsFil
 	sys.exit(2)
 
 inMemoryDict(dictFile)
+
+start_time = datetime.datetime.now()
 allQueries = inputQueries(queriesFile)
 outputToPost = handleQueries(allQueries)
+end_time = datetime.datetime.now()
+
 outputResult(outputToPost, resultsFile)
 
 delta = end_time - start_time
