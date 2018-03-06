@@ -3,7 +3,11 @@ import getopt
 import os
 import sys
 import re
+import datetime
 from nltk.stem.porter import *
+
+start_time = datetime.datetime.now()
+end_time = datetime.datetime.now()
 
 stemmer = PorterStemmer()
 
@@ -40,6 +44,7 @@ def fetchPostings(term):
 	return retPostings
 
 def inputQueries(queriesFile):
+	start_time = datetime.datetime.now()
 	queriesList = []
 	with open(queriesFile, 'r') as fq:
 		queries = fp.readlines()
@@ -59,8 +64,81 @@ def inputQueries(queriesFile):
 			postfixQuery = shuntingYard(queryTerms)
 			queriesList.append(postfixQuery)
 
-	print queriesList
 	return queriesList
+
+def refinePostings(pList):
+	result = []
+
+	for token in pList:
+		if(len(token.split('->')) > 1):
+			result.append(token.split('->')[0])
+		else:
+			result.append(token)
+
+	return result
+
+def handleQueries(queriesList):
+	output = []
+	operandStack = []
+
+	for query in queriesList:
+		if len(query) == 1:
+			output.append(refinePostings(fetchPostings(query[0])))
+
+		else:
+			for token in query:
+
+				if (token != 'AND' and token != 'OR' and token != 'NOT'):
+					operandStack.append(token)
+
+				elif (token == 'NOT'):
+					if (len(operandStack) > 0):
+						term_curr = operandStack.pop()
+						if not(isinstance(term_curr, (list,))):
+							term_curr = fetchPostings(term_curr)
+						ans = OpNOT(term_curr)
+						operandStack.append(ans)
+
+				elif(token == 'AND'):
+					if (len(operandStack) > 1):
+						term_curr1 = operandStack.pop()
+						if not(isinstance(term_curr1, (list,))):
+							term_curr1 = fetchPostings(term_curr1)
+
+						term_curr2 = operandStack.pop()
+						if not(isinstance(term_curr2, (list,))):
+							term_curr2 = fetchPostings(term_curr2)
+
+						ans = OpAND(term_curr1, term_curr2)
+						operandStack.append(ans)
+
+				elif(token == 'OR'):
+					if (len(operandStack) > 1):
+						term_curr1 = operandStack.pop()
+						if not(isinstance(term_curr1, (list,))):
+							term_curr1 = fetchPostings(term_curr1)
+
+						term_curr2 = operandStack.pop()
+						if not(isinstance(term_curr2, (list,))):
+							term_curr2 = fetchPostings(term_curr2)
+
+						ans = OpOR(term_curr1, term_curr2)
+						operandStack.append(ans)
+
+			output.append(operandStack.pop())
+
+	return output
+
+def outputResult(outputToPost, resultsFile):
+	fileout = open(resultsFile, 'w')
+
+	for line in outputToPost:
+		for val in line:
+			fileout.write(val)
+			fileout.write(' ')
+		fileout.write('\n')
+
+	end_time = datetime.datetime.now()
 
 def shuntingYard(infixQuery):
 	output = []
@@ -97,6 +175,39 @@ def shuntingYard(infixQuery):
 
 	return output
 
+
+def OpANDNOT(pList1, pList2):
+	ans = []
+	index1 = 0
+	index2 = 0
+	while index1 < len(pList1):
+		docID1 = pList1[index1].split('->')[0]
+
+		if index2 == len(pList2):
+			ans.append(docID1)
+			index1 += 1
+			continue
+		
+		docID2 = pList2[index2].split('->')[0]
+		
+		if (int(docID1) == int(docID2)):
+			index1 += 1
+			index2 += 1
+
+		elif (int(docID1) < int(docID2)):
+			ans.append(docID1)
+			index1 += 1
+
+		else:
+			if ('->' in pList2[index2] and pList2[int(pList2[index2].split('->')[1])] < int(docID1)):
+				while ('->' in pList2[index2] and pList2[int(pList2[index2].split('->')[1])] < int(docID1)):
+					index2 = pList2[index2].split('->')[1]
+			else:
+				index2 += 1
+
+	return ans
+
+
 def OpAND(pList1, pList2):
 	ans = []
 	index1 = 0
@@ -121,18 +232,18 @@ def OpAND(pList1, pList2):
 		elif (int(docID1) < int(docID2)):
 			if ('->' in pList1[index1] and pList1[int(pList1[index1].split('->')[1])] < int(docID2)):
 				while ('->' in pList1[index1] and pList1[int(pList1[index1].split('->')[1])] < int(docID2)):
-					regex = re.compile('^'+docID1+'*')
+					# regex = re.compile('^'+docID1+'*')
 					index1 = pList1[index1].split('->')[1]   # Skip jump needs improvement
-					print index1 
+					# print index1 
 			else:
 				index1 += 1
 
 		else:
 			if ('->' in pList2[index2] and pList2[int(pList2[index2].split('->')[1])] < int(docID1)):
 				while ('->' in pList2[index2] and pList2[int(pList2[index2].split('->')[1])] < int(docID1)):
-					regex = re.compile('^'+docID2+'*')
+					# regex = re.compile('^'+docID2+'*')
 					index2 = pList2[index2].split('->')[1]   # Skip jump needs improvement
-					print index2 
+					# print index2 
 			else:
 				index2 += 1
 
@@ -212,8 +323,6 @@ def OpNOT(pList):
 
 	return ans
 
-# def outputResult(result, resultsFile):
-
 
 def usage():
 	print "usage: " + sys.argv[0] + " -d dictionary-file -p postings-file -q file-of-queries -o output-file-of-results"
@@ -243,9 +352,17 @@ if dictFile == None or postingsFile == None or queriesFile == None or resultsFil
 
 inMemoryDict(dictFile)
 allQueries = inputQueries(queriesFile)
+outputToPost = handleQueries(allQueries)
+outputResult(outputToPost, resultsFile)
+
+delta = end_time - start_time
+print("Time taken in miliseconds = " + str(delta.total_seconds() * 1000)) # Time in miliseconds
+
+
 # print fetchPostings('&')
 # print OpNOT(fetchPostings('&'))
 # print OpAND(fetchPostings('shut'), fetchPostings('shutdown'))
 # print OpOR(fetchPostings('shut'), fetchPostings('shutdown'))
+
 
 fp.close()
