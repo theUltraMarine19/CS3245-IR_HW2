@@ -84,6 +84,7 @@ def handleQueries(queriesList):
 	operandStack = []
 
 	for query in queriesList:
+		# print query
 		if len(query) == 1:
 			output.append(refinePostings(fetchPostings(query[0])))
 
@@ -96,8 +97,12 @@ def handleQueries(queriesList):
 					operandStack.append(token)
 
 				elif (token == 'NOT'):
+					# To not do ANY operations for NOT NOT type queries
+					if ((len(operandStack) > 1) and (query[ind + 1] == 'NOT')):
+						ind += 1
+					
 					# a AND NOT b type queries
-					if ((len(operandStack) > 1) and (query[ind + 1] == 'AND')):
+					elif ((len(operandStack) > 1) and (query[ind + 1] == 'AND')):
 						term_curr1 = operandStack.pop()
 						if not(isinstance(term_curr1, (list,))):
 							term_curr1 = fetchPostings(term_curr1)
@@ -109,6 +114,20 @@ def handleQueries(queriesList):
 						ans = OpANDNOT(term_curr2, term_curr1)
 						operandStack.append(ans)
 						ind+=1
+
+					elif ((len(operandStack) >= 1) and (ind + 2 < len(query)) and (query[ind + 2] == 'AND')):
+						if (query[ind + 1] != 'AND' and query[ind + 1] != 'OR' and query[ind + 1] != 'NOT'):
+							term_curr1 = operandStack.pop()   	# A
+							if not(isinstance(term_curr1, (list,))):
+								term_curr1 = fetchPostings(term_curr1)
+
+							term_curr2 = query[ind+1]    		# B
+							if not(isinstance(term_curr2, (list,))):
+								term_curr2 = fetchPostings(term_curr2)
+
+							ans = OpANDNOT(term_curr2, term_curr1)
+							operandStack.append(ans)
+							ind+=2
 
 					# simple NOT queries
 					elif (len(operandStack) > 0):
@@ -156,7 +175,7 @@ def outputResult(outputToPost, resultsFile):
 	for line in outputToPost:
 		for val in line:
 			fileout.write(val)
-			fileout.write(' ')
+			fileout.write(' ')	
 		fileout.write('\n')
 
 def shuntingYard(infixQuery):

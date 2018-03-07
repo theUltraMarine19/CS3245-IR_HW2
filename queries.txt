@@ -1,3 +1,5 @@
+american AND NOT NOT assess
+NOT american AND assess
 american AND NOT american
 american
 american AND analyst
